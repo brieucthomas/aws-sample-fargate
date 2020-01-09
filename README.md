@@ -1,5 +1,7 @@
 # AWS Fargate Sample
 
+Run nginx on AWS Fargate ECS cluster.
+
 ## Required Tools
 
 *  [AWS CLI](https://docs.aws.amazon.com/fr_fr/cli/latest/userguide/cli-chap-install.html)
