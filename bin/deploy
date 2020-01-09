@@ -1,0 +1,41 @@
+#!/bin/bash
+# Debug with "set -o xtrace"
+
+set -o errexit -o nounset
+
+# Create buckets
+for BUCKET_NAME in "${TEMPLATE_BUCKET}" "${ARTIFACT_BUCKET}"
+do
+  if ! aws s3api head-bucket --bucket "${BUCKET_NAME}" 2>/dev/null; then
+    aws s3 mb "s3://${BUCKET_NAME}"
+    aws s3api wait bucket-exists --bucket "${BUCKET_NAME}"
+  fi
+done
+
+# Deploy templates
+rm -rf deploy/ && mkdir -p deploy/
+zip deploy/templates.zip fargate.yaml templates/*
+aws s3 rm s3://"${TEMPLATE_BUCKET}" --recursive
+
+aws s3 cp deploy/templates.zip "s3://${TEMPLATE_BUCKET}" --acl public-read
+aws s3 cp --recursive templates/ "s3://${TEMPLATE_BUCKET}/templates" --acl public-read
+
+aws cloudformation deploy \
+  --stack-name aws-fargate-sample \
+  --template-file fargate.yaml \
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+  --parameter-overrides \
+          AppName="${APP_NAME}" \
+          GitRepositoryName=aws-fargate-sample \
+          GitBranchName=master \
+          TemplateBucket="${TEMPLATE_BUCKET}" \
+          ArtifactBucket="${ARTIFACT_BUCKET}" \
+  --no-fail-on-empty-changeset
+
+SERVICE_URL="$(aws cloudformation describe-stacks --stack-name aws-fargate-sample --query "Stacks[0].Outputs[?OutputKey=='ServiceUrl'].OutputValue" --output text)"
+PIPELINE_URL="$(aws cloudformation describe-stacks --stack-name aws-fargate-sample --query "Stacks[0].Outputs[?OutputKey=='PipelineUrl'].OutputValue" --output text)"
+
+echo ""
+echo "Service URL: ${SERVICE_URL}"
+echo "Pipeline URL: ${PIPELINE_URL}"
+echo ""

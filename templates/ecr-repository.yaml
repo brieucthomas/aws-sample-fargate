@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >
+  This stack creates ECR docker image repository.
+
+Parameters:
+  Name:
+    Type: String
+    Description: The name of the repository
+
+  # Amazon ECR Lifecycle Policies to try and reduce storage costs (only for non production repositories)
+  # See: https://docs.aws.amazon.com/AmazonECR/latest/userguide/LifecyclePolicies.html
+  LifecyclePolicy:
+    Type: String
+    Default: |
+      {
+          "rules": [
+              {
+                  "rulePriority": 1,
+                  "description": "Expire images older than 14 days",
+                  "selection": {
+                      "tagStatus": "any",
+                      "countType": "sinceImagePushed",
+                      "countUnit": "days",
+                      "countNumber": 14
+                  },
+                  "action": {
+                      "type": "expire"
+                  }
+              }
+          ]
+      }
+
+Resources:
+  ImageRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      LifecyclePolicy:
+        LifecyclePolicyText: !Ref LifecyclePolicy
+      RepositoryName: !Ref Name
+
+Outputs:
+  ImageRepositoryUri:
+    Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ImageRepository}

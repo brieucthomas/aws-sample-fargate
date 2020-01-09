@@ -1,0 +1,24 @@
+#!/bin/bash
+# Debug with "set -o xtrace"
+
+set -o errexit -o nounset
+
+# Delete S3 Buckets
+for BUCKET_NAME in "${TEMPLATE_BUCKET}" "${ARTIFACT_BUCKET}"
+do
+  if aws s3api head-bucket --bucket "${BUCKET_NAME}" 2>/dev/null; then
+    aws s3 rb s3://"${BUCKET_NAME}" --force
+    aws s3api wait bucket-not-exists --bucket "${BUCKET_NAME}"
+  fi
+done
+
+# Delete docker image registry
+if aws ecr describe-repositories --repository-names "${APP_NAME}" 2>/dev/null; then
+  aws ecr delete-repository --repository-name "${APP_NAME}" --force
+fi
+
+# Delete CloudFormation Stacks
+aws cloudformation delete-stack --stack-name aws-fargate-sample
+aws cloudformation wait stack-delete-complete --stack-name aws-fargate-sample
+
+echo "Tear Down Completed."

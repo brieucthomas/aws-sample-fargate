@@ -1,0 +1,41 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      docker: 18
+
+  pre_build:
+    commands:
+      - aws --version
+      - echo Logging in to Amazon ECR...
+      - $(aws ecr get-login --region "${AWS_DEFAULT_REGION}" --no-include-email)
+      - echo Building image tags...
+      - GIT_BRANCH_NAME="$(echo $CODEBUILD_BUILD_ID | sed "s/.*---\(.*\)\:.*/\1/")"
+      - GIT_COMMIT_SHA="${CODEBUILD_RESOLVED_SOURCE_VERSION}"
+      - IMAGE_TAG="${GIT_COMMIT_SHA}"
+      - export
+      - printenv
+
+  build:
+    commands:
+      - echo Building image...
+      - docker build -t ${IMAGE_REPOSITORY_URI}:${IMAGE_TAG} -t ${IMAGE_REPOSITORY_URI}:latest .
+
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
+
+      # https://docs.aws.amazon.com/AmazonECR/latest/userguide/docker-push-ecr-image.html
+      - echo Pushing Docker images...
+      - docker push ${IMAGE_REPOSITORY_URI}:${IMAGE_TAG}
+      - docker push ${IMAGE_REPOSITORY_URI}:latest
+
+      # https://docs.aws.amazon.com/codepipeline/latest/userguide/file-reference.html#pipelines-create-image-definitions
+      - echo Writing image definitions file...
+      - printf '[{"name":"%s","imageUri":"%s"}]' "${CONTAINER_NAME}" "${IMAGE_REPOSITORY_URI}:${IMAGE_TAG}" > imagedefinitions.json
+      - cat imagedefinitions.json
+
+artifacts:
+  files: imagedefinitions.json
